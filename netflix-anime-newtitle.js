@@ -3,46 +3,93 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const config = require('./config.js');
 
-const writeSpreadSheet = require('./google-spread-sheet');
+const writeSpreadSheet = require('./write-spread-sheet').writeSpreadSheet;
+const getTitle = require('./get-netflix-title').getTitle;
 
-// console.log(config.username, config.password);
+let getTitleCount = 0;
+
+async function getNewTitle (cells, filterTarget) {
+    //concatは配列を繋げる
+    let arr = filterTarget.concat(cells);
+    const doubleTitle = arr.filter( (title, index, self) => {
+        //lastIndexOfは配列の最後から検索してインデックスを返す。
+        return self.indexOf(title) === index && index !== self.lastIndexOf(title);
+    });
+    const newTitleFilter = filterTarget.filter( title => {
+        return doubleTitle.indexOf(title) == -1;
+    });
+
+    console.log(`新タイトル：${newTitleFilter}`);
+    if( newTitleFilter.length > 0 ) {
+        await writeSpreadSheet(newTitleFilter);
+    } else {
+        console.log('新作はありませんでした。処理を終了します');
+    }
+    return;
+}
 
 (async () => {
-    let results = [];
-    // const SHOW_LOADING = config.showLoading;
+    const spreadItems = await getTitle();
+    let cells = spreadItems.filter(item => item);
+
+    const viewportWidth = 1000;
+    const viewportHeight = 630;
     const browser = await puppeteer.launch({
-        headless: false,
+        headless: true,
     });
     const page = await browser.newPage();
 
-    // Open login page and login
+    // ネットフリックスのページへログイン
+    page.setViewport({width: viewportWidth, height: viewportHeight});
     await page.goto('https://www.netflix.com/jp/login');
     await page.type('input[name="userLoginId"]', config.username);
     await page.type('input[name="password"]', config.password);
     await page.keyboard.press('Enter');
+    console.log('ログイン完了しました。');
     await page.waitForNavigation();
 
     await page.click('div[class="profile-icon"]');
-    
+
+    //イメージを読み込まずにページへ遷移することによってスピードアップ
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+        if(['image', 'stylesheet', 'font'].includes(request.resourceType())) {
+            request.abort();
+        } else {
+            request.continue();
+        }
+    });
+
     //クリックなどのアクションを行いURLが画面上で変更してしまうとスクレイピングできなかった
     await page.goto('https://www.netflix.com/browse/genre/7424?so=yr');
-    
-    //クリックで公開年のページへ遷移してうまくいかなかったやつ
-    // await page.click('button[class="aro-grid-toggle"]');
-    // await page.click('div[class="sortGallery"]');
-    // await page.click('#appMountPoint > div > div > div:nth-child(1) > div > div.pinning-header > div > div.sub-header > div > div > div > div.aro-genre-details > div > div > div > div > div.sub-menu.theme-aro > ul > li:nth-child(2) > a');
-    // await page.waitForNavigation();
 
-    var titletest = await page.evaluate(() => {
+    // スクロールダウン２回して半分くらいのタイトルの遅延読み込みさせておく。読み込みすぎてもタイトルを微変したものを拾う可能性があるので不要
+    await page.evaluate(() => {
+        window.scrollTo(0,10000);
+    }).catch(()=>'スクロールはエラー');
+    await page.waitFor(2000);
+
+    await page.evaluate(() => {
+        window.scrollTo(0,20000);
+    }).catch(()=>'スクロールはエラー');
+    console.log('スクロール完了');    
+    await page.waitFor(2000);
+
+    console.log('トップタイトル取得します');
+    let topTitle = await page.evaluate(() => {
+        
         //配列はevaluateの中で宣言したものでないと使えなかった
-        var titles = [];
-        var titleNode = document.querySelectorAll('div.ptrack-content > a > div > div > div');
-        for (i = 0;i < 10;i++) {
+        let titles = [];
+        let title;
+        let titleNode = document.querySelectorAll('div.ptrack-content > a > div > div > p');
+        for (i = 0;i < titleNode.length;i++) {
             titles.push(titleNode[i].innerHTML);
         }
         return titles;
+        // count++;
     }).catch(() => 'titlesはエラー');
 
-    // TOP10動画が新しく追加された動画かフィルターをかける。10個目も新しい動画なら、さらにプラス10動画を調べる
-    writeSpreadSheet(titletest);
+    await getNewTitle(cells, topTitle);
+    await browser.close();
+    return;
 })();
