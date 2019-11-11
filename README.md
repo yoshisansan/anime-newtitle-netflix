@@ -1,1 +1,2 @@
 # anime-newtitle-netflix
+pupeteer(nodeJS)を用いてネットフリックスへ自動ログイン後、新規アニメタイトルを取得して新規タイトルがあればGoogleSpreadSheetのAPIを叩いて追記します。その後、自動でツイートしてくれるスクリプトです。
