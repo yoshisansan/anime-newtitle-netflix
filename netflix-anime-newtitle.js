@@ -5,8 +5,8 @@ const config = require('./config.js');
 
 const writeSpreadSheet = require('./write-spread-sheet').writeSpreadSheet;
 const getTitle = require('./get-netflix-title').getTitle;
-
-let getTitleCount = 0;
+const twitter = require('./twitter');
+const getMessage = require('./makeTweetContent');
 
 async function getNewTitle (cells, filterTarget) {
     //concatは配列を繋げる
@@ -21,7 +21,11 @@ async function getNewTitle (cells, filterTarget) {
 
     console.log(`新タイトル：${newTitleFilter}`);
     if( newTitleFilter.length > 0 ) {
-        await writeSpreadSheet(newTitleFilter);
+        // await writeSpreadSheet(newTitleFilter);
+        // getMessageオブジェクト→Twitterオブジェクトへ流れて呟きを実行します
+        await getMessage.MessageAsync(newTitleFilter);
+        // await twitter.twitterInitialize();
+        // await twitter.tweet(newTitleFilter);
     } else {
         console.log('新作はありませんでした。処理を終了します');
     }
@@ -80,7 +84,6 @@ async function getNewTitle (cells, filterTarget) {
         
         //配列はevaluateの中で宣言したものでないと使えなかった
         let titles = [];
-        let title;
         let titleNode = document.querySelectorAll('div.ptrack-content > a > div > div > p');
         for (i = 0;i < titleNode.length;i++) {
             titles.push(titleNode[i].innerHTML);
@@ -91,5 +94,6 @@ async function getNewTitle (cells, filterTarget) {
 
     await getNewTitle(cells, topTitle);
     await browser.close();
+
     return;
 })();
